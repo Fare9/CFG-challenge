@@ -11,6 +11,7 @@
 #include <vector>
 #include <string_view>
 #include <cassert>
+#include <fstream>
 
 namespace CFG
 {
@@ -57,6 +58,13 @@ namespace CFG
 
         Function *getParent() { return parent_function; }
 
+        void dump_block_dot(std::ofstream &stream)
+        {
+            stream << "\"" << name
+                   << "\" [shape=box, style=filled, fillcolor=lightgrey, label=\""
+                   << "BB-" << name << "\"];\n\n";
+        }
+
     private:
         BasicBlock(std::string_view Name, Function *Parent = nullptr);
 
@@ -68,15 +76,15 @@ namespace CFG
         static BasicBlock *Create(std::string_view Name = "", Function *Parent = nullptr)
         {
             assert(Parent && "Parent Function must be specified");
-            
+
             return new BasicBlock(Name, Parent);
         }
 
         friend std::ostream &operator<<(std::ostream &os, const BasicBlock &bb)
         {
-            os << "BB-" << bb.get_name() << "[start-addr=0x" 
-                << std::hex << bb.get_start_addr() 
-                << ", end-addr=0x" << bb.get_end_addr();
+            os << "BB-" << bb.get_name() << "[start-addr=0x"
+               << std::hex << bb.get_start_addr()
+               << ", end-addr=0x" << bb.get_end_addr();
             if (bb.get_entry_block())
                 os << ", entry-block";
             os << "]\n";

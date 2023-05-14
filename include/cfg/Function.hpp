@@ -15,6 +15,8 @@
 #include <memory>
 #include <cassert>
 #include <algorithm>
+#include <unordered_map>
+#include <fstream>
 
 namespace CFG
 {
@@ -27,9 +29,39 @@ namespace CFG
         /// @brief Name for the function
         std::string name;
         /// @brief Vector of unique pointers of basic blocks
-        std::vector<BasicBlock*> basic_blocks;
+        std::vector<BasicBlock *> basic_blocks;
         /// @brief Parent module
         Module *parent_module;
+
+        using tag_bb_t = std::pair<std::string, BasicBlock *>;
+
+        using edges_t = std::unordered_map<BasicBlock *, std::vector<tag_bb_t>>;
+
+        /// @brief list of sucessors
+        edges_t sucessors;
+
+        std::unordered_map<BasicBlock*, std::vector<BasicBlock*>> predecessor;
+
+        void delete_block_links(BasicBlock * bb)
+        {
+            for (auto pred : predecessor[bb])
+            {
+                /// get the list of sucessors from predecessors
+                auto & pred_successors = sucessors[pred];
+
+                /// look for the block to delete 
+                auto it = std::find_if(pred_successors.begin(), pred_successors.end(), [=](tag_bb_t & p)
+                {
+                    return p.second == bb;
+                });
+
+                /// now delete the block from the list of its sucessors
+                if (it != pred_successors.end())
+                    pred_successors.erase(it);
+            }
+            /// now delete the sucessors
+            sucessors.erase(bb);
+        }
 
     public:
         ~Function()
@@ -41,9 +73,9 @@ namespace CFG
 
         const std::string &get_name() const { return name; }
 
-        const std::vector<BasicBlock*> &get_basic_blocks() const { return basic_blocks; }
+        const std::vector<BasicBlock *> &get_basic_blocks() const { return basic_blocks; }
 
-        void add_basic_block(BasicBlock* bb)
+        void add_basic_block(BasicBlock *bb)
         {
             if (!basic_blocks.size())
                 bb->set_entry_block(true);
@@ -55,14 +87,16 @@ namespace CFG
             return basic_blocks.back();
         }
 
-        bool delete_basic_block(BasicBlock * bb)
+        bool delete_basic_block(BasicBlock *bb)
         {
             auto b = std::find(basic_blocks.begin(), basic_blocks.end(), bb);
 
             if (b == basic_blocks.end())
                 return true;
-            
+
             std::unique_ptr<BasicBlock> _(*b);
+
+            delete_block_links(*b);
 
             basic_blocks.erase(b);
 
@@ -71,20 +105,80 @@ namespace CFG
 
         bool delete_basic_block(std::string_view name)
         {
-            auto b = std::find_if(basic_blocks.begin(), basic_blocks.end(), 
-                [=](BasicBlock *b)
-                {
-                    return b->get_name() == name;
-                });
+            auto b = std::find_if(basic_blocks.begin(), basic_blocks.end(),
+                                  [=](BasicBlock *b)
+                                  {
+                                      return b->get_name() == name;
+                                  });
 
             if (b == basic_blocks.end())
                 return true;
-            
+
             std::unique_ptr<BasicBlock> _(*b);
+
+            delete_block_links(*b);
 
             basic_blocks.erase(b);
 
             return false;
+        }
+
+        /// @brief Add a sucessor block
+        /// @param src block to include the sucessor
+        /// @param dst destination block
+        /// @param tag tag to include in the connection
+        /// @return true in case there was an error, false other case
+        bool add_sucessor(BasicBlock *src, BasicBlock *dst, std::string_view tag)
+        {
+            auto &vec = sucessors[src];
+
+            auto it = std::find_if(vec.begin(), vec.end(),
+                                   [=](tag_bb_t tag_bb)
+                                   {
+                                       return tag_bb.first == tag;
+                                   });
+
+            if (it != vec.end())
+                return true;
+
+            std::string tag_str = tag.data();
+
+            vec.push_back({tag_str, dst});
+
+            predecessor[dst].push_back(src);
+
+            return false;
+        }
+
+        void dump_function_dot(std::ofstream &stream)
+        {
+            stream << "digraph \"" << name << "\"{\n";
+            stream << "style=\"dashed\";\n";
+            stream << "color=\"black\";\n";
+            stream << "label=\"" << name << "\";\n";
+
+            for (auto node : basic_blocks)
+            {
+                node->dump_block_dot(stream);
+            }
+
+            for (auto edge : sucessors)
+            {
+                auto src = edge.first;
+
+                auto &vec = edge.second;
+
+                for (auto succ : vec)
+                {
+                    auto &tag = succ.first;
+                    auto dst = succ.second;
+                    stream << "\"" << src->get_name() << "\" -> "
+                           << "\"" << dst->get_name() << "\" [style=\"solid,bold\",color=black,weight=10,constraint=true,label=\""
+                           << tag << "\"];\n";
+                }
+            }
+
+            stream << "}";
         }
 
     private:
