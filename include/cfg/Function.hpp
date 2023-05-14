@@ -8,6 +8,9 @@
 #define FUNCTION_HPP
 
 #include "cfg/BasicBlock.hpp"
+#include "exceptions/noentryblock_exception.hpp"
+#include "exceptions/noconnectedblock_exception.hpp"
+#include "exceptions/multipleentryblock_exception.hpp"
 
 #include <iostream>
 #include <vector>
@@ -17,6 +20,7 @@
 #include <algorithm>
 #include <unordered_map>
 #include <fstream>
+#include <set>
 
 namespace CFG
 {
@@ -40,20 +44,18 @@ namespace CFG
         /// @brief list of sucessors
         edges_t sucessors;
 
-        std::unordered_map<BasicBlock*, std::vector<BasicBlock*>> predecessor;
+        std::unordered_map<BasicBlock *, std::vector<BasicBlock *>> predecessor;
 
-        void delete_block_links(BasicBlock * bb)
+        void delete_block_links(BasicBlock *bb)
         {
             for (auto pred : predecessor[bb])
             {
                 /// get the list of sucessors from predecessors
-                auto & pred_successors = sucessors[pred];
+                auto &pred_successors = sucessors[pred];
 
-                /// look for the block to delete 
-                auto it = std::find_if(pred_successors.begin(), pred_successors.end(), [=](tag_bb_t & p)
-                {
-                    return p.second == bb;
-                });
+                /// look for the block to delete
+                auto it = std::find_if(pred_successors.begin(), pred_successors.end(), [=](tag_bb_t &p)
+                                       { return p.second == bb; });
 
                 /// now delete the block from the list of its sucessors
                 if (it != pred_successors.end())
@@ -179,6 +181,48 @@ namespace CFG
             }
 
             stream << "}";
+        }
+
+        void validate_function()
+        {
+            std::vector<BasicBlock *> todo;
+            std::set<BasicBlock *> visited;
+
+            if (basic_blocks.size() == 0)
+                return;
+
+            auto number_of_entry = std::count_if(basic_blocks.begin(), basic_blocks.end(), [](BasicBlock *bb)
+                                                 { return bb->get_entry_block(); });
+
+            if (number_of_entry == 0)
+                throw exceptions::NoEntryBlockException("No entry block found on control flow graph");
+            else if (number_of_entry > 1)
+                throw exceptions::MultipleEntryBlockException("Multiple entry blocks found on control flow graph");
+
+            todo.push_back(basic_blocks[0]);
+
+            /// Depth First Search
+            while (!todo.empty())
+            {
+                auto node = todo.back();
+                todo.pop_back();
+
+                if (visited.find(node) != visited.end())
+                    continue;
+
+                visited.insert(node);
+
+                auto suces = sucessors[node];
+                /// visit the nodes in reverse order for the sucessors
+                for (auto suc = suces.rbegin(); suc != suces.rend(); ++suc)
+                    todo.push_back(suc->second);
+            }
+
+            /// Once we have visited all the nodes following the DFS
+            /// in this kind of graph we should have all the nodes
+            /// visited if they have at least one connection
+            if (basic_blocks.size() != visited.size())
+                throw exceptions::NoConnectedBlockException("A node in the function is not connected to the control flow graph");
         }
 
     private:
