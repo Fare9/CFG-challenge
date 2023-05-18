@@ -33,7 +33,7 @@ namespace CFG
         /// @brief Name for the function
         std::string name;
         /// @brief Vector of unique pointers of basic blocks
-        std::vector<BasicBlock *> basic_blocks;
+        std::vector<std::unique_ptr<BasicBlock>> basic_blocks;
         /// @brief Parent module
         Module *parent_module;
 
@@ -61,44 +61,40 @@ namespace CFG
                 if (it != pred_successors.end())
                     pred_successors.erase(it);
             }
+            /// delete the predecessor
+            predecessor.erase(bb);
             /// now delete the sucessors
             sucessors.erase(bb);
         }
 
     public:
-        ~Function()
-        {
-            for (auto bb : basic_blocks)
-                delete bb;
-            basic_blocks.clear();
-        }
+        ~Function() = default;
 
         const std::string &get_name() const { return name; }
 
-        const std::vector<BasicBlock *> &get_basic_blocks() const { return basic_blocks; }
+        const std::vector<std::unique_ptr<BasicBlock>> &get_basic_blocks() const { return basic_blocks; }
 
-        void add_basic_block(BasicBlock *bb)
+        void add_basic_block(std::unique_ptr<BasicBlock> bb)
         {
             if (!basic_blocks.size())
                 bb->set_entry_block(true);
-            basic_blocks.push_back(bb);
+            basic_blocks.push_back(std::move(bb));
         }
 
         BasicBlock *get_last_bb()
         {
-            return basic_blocks.back();
+            return basic_blocks.back().get();
         }
 
         bool delete_basic_block(BasicBlock *bb)
         {
-            auto b = std::find(basic_blocks.begin(), basic_blocks.end(), bb);
+            auto b = std::find_if(basic_blocks.begin(), basic_blocks.end(), [=](std::unique_ptr<BasicBlock> &b)
+                                  { return b.get() == bb; });
 
             if (b == basic_blocks.end())
                 return true;
 
-            std::unique_ptr<BasicBlock> _(*b);
-
-            delete_block_links(*b);
+            delete_block_links(b->get());
 
             basic_blocks.erase(b);
 
@@ -108,7 +104,7 @@ namespace CFG
         bool delete_basic_block(std::string_view name)
         {
             auto b = std::find_if(basic_blocks.begin(), basic_blocks.end(),
-                                  [=](BasicBlock *b)
+                                  [=](std::unique_ptr<BasicBlock> &b)
                                   {
                                       return b->get_name() == name;
                                   });
@@ -116,9 +112,7 @@ namespace CFG
             if (b == basic_blocks.end())
                 return true;
 
-            std::unique_ptr<BasicBlock> _(*b);
-
-            delete_block_links(*b);
+            delete_block_links(b->get());
 
             basic_blocks.erase(b);
 
@@ -159,7 +153,7 @@ namespace CFG
             stream << "color=\"black\";\n";
             stream << "label=\"" << name << "\";\n";
 
-            for (auto node : basic_blocks)
+            for (auto &node : basic_blocks)
             {
                 node->dump_block_dot(stream);
             }
@@ -189,9 +183,9 @@ namespace CFG
             std::set<BasicBlock *> visited;
 
             if (basic_blocks.size() == 0)
-                return;
+                throw exceptions::NoEntryBlockException("No entry block found on control flow graph");
 
-            auto number_of_entry = std::count_if(basic_blocks.begin(), basic_blocks.end(), [](BasicBlock *bb)
+            auto number_of_entry = std::count_if(basic_blocks.begin(), basic_blocks.end(), [](std::unique_ptr<BasicBlock> &bb)
                                                  { return bb->get_entry_block(); });
 
             if (number_of_entry == 0)
@@ -199,7 +193,7 @@ namespace CFG
             else if (number_of_entry > 1)
                 throw exceptions::MultipleEntryBlockException("Multiple entry blocks found on control flow graph");
 
-            todo.push_back(basic_blocks[0]);
+            todo.push_back(basic_blocks[0].get());
 
             /// Depth First Search
             while (!todo.empty())
@@ -225,16 +219,10 @@ namespace CFG
                 throw exceptions::NoConnectedBlockException("A node in the function is not connected to the control flow graph");
         }
 
-    private:
-        Function(std::string_view Name, Module *Parent = nullptr);
+        Function(std::string_view Name, Module *Parent = nullptr) : name(Name), parent_module(Parent) {}
 
     public:
-        static Function *Create(std::string_view Name, Module *Parent = nullptr)
-        {
-            assert(Parent && "Parent Module must be specified");
-
-            return new Function(Name, Parent);
-        }
+        static Function *Create(std::string_view Name, Module *Parent = nullptr);
 
         friend std::ostream &operator<<(std::ostream &os, const Function &func)
         {

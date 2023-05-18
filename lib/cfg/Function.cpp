@@ -3,7 +3,11 @@
 
 using namespace CFG;
 
-Function::Function(std::string_view Name, Module *Parent) : name(Name), parent_module(Parent)
+Function *Function::Create(std::string_view Name, Module *Parent)
 {
-    Parent->add_function(this);
+    assert(Parent && "Parent Module must be specified");
+
+    Parent->add_function(std::make_unique<Function>(Name, Parent));
+
+    return Parent->get_last_function();
 }

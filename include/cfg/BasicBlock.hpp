@@ -65,20 +65,14 @@ namespace CFG
                    << "BB-" << name << "\"];\n\n";
         }
 
-    private:
-        BasicBlock(std::string_view Name, Function *Parent = nullptr);
+        BasicBlock(std::string_view Name, Function *Parent = nullptr) : name(Name), parent_function(Parent) {}
 
     public:
         /// @brief Static function to create a new basic block
         /// @param Name name given to the basic block
         /// @param Parent parent function of the basic block
         /// @return pointer to a new allocated basic block
-        static BasicBlock *Create(std::string_view Name = "", Function *Parent = nullptr)
-        {
-            assert(Parent && "Parent Function must be specified");
-
-            return new BasicBlock(Name, Parent);
-        }
+        static BasicBlock *Create(std::string_view Name = "", Function *Parent = nullptr);
 
         friend std::ostream &operator<<(std::ostream &os, const BasicBlock &bb)
         {

@@ -2,9 +2,14 @@
 #include "cfg/BasicBlock.hpp"
 #include "cfg/Function.hpp"
 
-using namespace CFG;
-
-BasicBlock::BasicBlock(std::string_view Name, Function *Parent) : name(Name), parent_function(Parent)
+namespace CFG
 {
-    Parent->add_basic_block(this);
+    BasicBlock *BasicBlock::Create(std::string_view Name, Function *Parent)
+    {
+        assert(Parent && "Parent Function must be specified");
+
+        Parent->add_basic_block(std::make_unique<BasicBlock>(Name, Parent));
+
+        return Parent->get_last_bb();
+    }
 }
