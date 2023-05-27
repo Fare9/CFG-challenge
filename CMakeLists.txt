@@ -16,3 +16,5 @@ include_directories(BEFORE
 
 add_subdirectory(lib)
 add_subdirectory(tools)
+
+target_compile_features(cfg-lib PUBLIC cxx_std_20)
